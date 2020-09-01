@@ -28,20 +28,64 @@ public class MqttConnector {
             mqttHandlers = new HashMap();
         }
     }
-
-    public void subscribe(String brokerHost, Long brokerPort, String brokerOrganisation, String topicName, String onMessageMicroflow, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, mqttclient.proxies.qos QoS, long timeout) throws Exception {
+    
+    public void subscribe(String brokerHost, Long brokerPort, String brokerOrganisation, String topicName, String onMessageMicroflow, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, mqttclient.proxies.qos QoS, long timeout, String overridingClientId, boolean forceSsl) throws Exception {
         logger.info("MqttConnector.subscribe");
-        MqttConnection connection = getMqttConnection(brokerHost, brokerPort, brokerOrganisation, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, timeout);
+        MqttConnection connection = getMqttConnection(brokerHost, brokerPort, brokerOrganisation, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, timeout, overridingClientId, forceSsl);
         connection.subscribe(topicName, onMessageMicroflow, QoS);
     }
-
-    public void publish(String brokerHost, Long brokerPort, String brokerOrganisation, String topicName, String message, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, mqttclient.proxies.qos QoS, long timeout) throws Exception {
-        logger.info("MqttConnector.publish");
-        MqttConnection connection = getMqttConnection(brokerHost, brokerPort, brokerOrganisation, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, timeout);
-        connection.publish(topicName, message, QoS);
+    
+    /**
+     * Fall back for legacy actions with empty overriding client id and no forceSsl
+     * 
+     * @param brokerHost
+     * @param brokerPort
+     * @param brokerOrganisation
+     * @param topicName
+     * @param onMessageMicroflow
+     * @param CA
+     * @param ClientCertificate
+     * @param ClientKey
+     * @param CertificatePassword
+     * @param username
+     * @param password
+     * @param QoS
+     * @param timeout
+     * @throws Exception
+     */
+    public void subscribe(String brokerHost, Long brokerPort, String brokerOrganisation, String topicName, String onMessageMicroflow, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, mqttclient.proxies.qos QoS, long timeout) throws Exception {
+    	this.subscribe(brokerHost, brokerPort, brokerOrganisation, topicName, onMessageMicroflow, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, QoS, timeout, null, false);   
     }
 
-    private MqttConnection getMqttConnection(String brokerHost, Long brokerPort, String brokerOrganisation, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, long timeout) throws Exception {
+    public void publish(String brokerHost, Long brokerPort, String brokerOrganisation, String topicName, String message, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, mqttclient.proxies.qos QoS, long timeout, String overridingClientId, boolean forceSsl) throws Exception {
+        logger.info("MqttConnector.publish");
+        MqttConnection connection = getMqttConnection(brokerHost, brokerPort, brokerOrganisation, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, timeout, overridingClientId, forceSsl);
+        connection.publish(topicName, message, QoS);
+    }
+    
+    /**
+     *  Fall back for legacy actions with empty overriding client id and no forceSsl
+     *  
+     * @param brokerHost
+     * @param brokerPort
+     * @param brokerOrganisation
+     * @param topicName
+     * @param message
+     * @param CA
+     * @param ClientCertificate
+     * @param ClientKey
+     * @param CertificatePassword
+     * @param username
+     * @param password
+     * @param QoS
+     * @param timeout
+     * @throws Exception
+     */
+    public void publish(String brokerHost, Long brokerPort, String brokerOrganisation, String topicName, String message, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, mqttclient.proxies.qos QoS, long timeout) throws Exception {
+    	this.publish(brokerHost, brokerPort, brokerOrganisation, topicName, message, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, QoS, timeout, null, false);
+    }
+
+    private MqttConnection getMqttConnection(String brokerHost, Long brokerPort, String brokerOrganisation, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, long timeout, String overridingClientId, boolean forceSsl) throws Exception {
         String key = brokerHost + ":" + brokerPort;
         MqttConnection handler;
         synchronized (mqttHandlers) {
@@ -50,7 +94,7 @@ public class MqttConnector {
             if (!mqttHandlers.containsKey(key)) {
                 logger.info("creating new MqttConnection");
                 try {
-                    handler = new MqttConnection(logger, brokerHost, brokerPort, brokerOrganisation, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, timeout);
+                    handler = new MqttConnection(logger, brokerHost, brokerPort, brokerOrganisation, CA, ClientCertificate, ClientKey, CertificatePassword, username, password, timeout, overridingClientId, forceSsl);
                     mqttHandlers.put(key, handler);
                 } catch (Exception e) {
                     logger.error(e);
@@ -68,7 +112,7 @@ public class MqttConnector {
     }
 
     public void unsubscribe(String brokerHost, Long brokerPort, String topicName) throws Exception {
-        MqttConnection connection = getMqttConnection(brokerHost, brokerPort, null, null, null, null, null, null, null,0);
+        MqttConnection connection = getMqttConnection(brokerHost, brokerPort, null, null, null, null, null, null, null,0, null, false);
         connection.unsubscribe(topicName);
     }
 
@@ -82,7 +126,7 @@ public class MqttConnector {
         private MqttConnectOptions connOpts;
         private MemoryPersistence persistence;
 
-        public MqttConnection(ILogNode logger, String brokerHost,  Long brokerPort, String brokerOrganisation, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, long connectionTimeout) throws Exception {
+        public MqttConnection(ILogNode logger, String brokerHost,  Long brokerPort, String brokerOrganisation, String CA, String ClientCertificate, String ClientKey, String CertificatePassword, String username, String password, long connectionTimeout, String overridingClientId, boolean forceSsl) throws Exception {
             logger.info("new MqttConnection");
 
             this.logger = logger;
@@ -90,10 +134,13 @@ public class MqttConnector {
             String hostname = InetAddress.getLocalHost().getHostName();
             String xasId = Core.getXASId();
             
-            boolean useSsl = (ClientCertificate != null && !ClientCertificate.equals(""));
+            boolean useTwoWaySsl = (ClientCertificate != null && !ClientCertificate.equals(""));
+            boolean useSsl = useTwoWaySsl || forceSsl;
+            
             connOpts = new MqttConnectOptions();
             connOpts.setCleanSession(true);
             connOpts.setAutomaticReconnect(true);
+            
             if(connectionTimeout != 0)
             	connOpts.setConnectionTimeout(Math.toIntExact(connectionTimeout));
             else
@@ -108,6 +155,12 @@ public class MqttConnector {
             else{
             	broker = String.format("tcp://%s:%d", brokerHost, brokerPort);
                 clientId = "MxClient_" + xasId + "_" + hostname + "_" + brokerHost + "_" + brokerPort;
+            }
+            
+            if (overridingClientId != null) {
+            	logger.info("instead of using the default clientId " + clientId + " the overriding client id is used: " + overridingClientId);
+            	clientId = overridingClientId;
+            	
             }
             logger.info("new MqttConnection client id " + clientId);
 
@@ -126,6 +179,9 @@ public class MqttConnector {
                 
                 connOpts.setCleanSession(true);
 
+            }
+            
+            if (useTwoWaySsl) {
                 try {
                     String resourcesPath = null;
                     try {
